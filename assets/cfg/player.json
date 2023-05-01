@@ -17,5 +17,7 @@
             }
         ]
     },
-    "input_velocity": 100
+    "input_velocity": 100,
+    "shield_duration": 2,
+    "shiel_cooldown": 6
 }

@@ -11,6 +11,7 @@ from src.ecs.systems.s_enemy_spawner import system_enemy_spawner
 from src.ecs.systems.s_input_player import system_input_player
 from src.ecs.systems.s_movement import system_movement
 from src.ecs.systems.s_rendering import system_rendering
+from src.ecs.systems.s_pause import system_pause
 from src.ecs.systems.s_screen_bounce import system_screen_bounce
 from src.ecs.systems.s_screen_player import system_screen_player
 from src.ecs.systems.s_screen_bullet import system_screen_bullet
@@ -26,7 +27,7 @@ from src.ecs.components.tags.c_tag_bullet import CTagBullet
 
 from src.ecs.components.c_input_command import CInputCommand, CommandPhase
 
-from src.create.prefab_creator import create_enemy_spawner, create_input_player, create_player_square, create_bullet
+from src.create.prefab_creator import create_enemy_spawner, create_input_player, create_player_square, create_bullet, create_text
 
 
 class GameEngine:
@@ -41,6 +42,7 @@ class GameEngine:
 
         self.clock = pygame.time.Clock()
         self.is_running = False
+        self.is_paused = False
         self.framerate = self.window_cfg["framerate"]
         self.delta_time = 0
         self.bg_color = pygame.Color(self.window_cfg["bg_color"]["r"],
@@ -63,19 +65,24 @@ class GameEngine:
             self.bullet_cfg = json.load(bullet_file)
         with open("assets/cfg/explosion.json") as explosion_file:
             self.explosion_cfg = json.load(explosion_file)
+        with open("assets/cfg/interface.json", encoding="utf-8") as interface_file:
+            self.interface_cfg = json.load(interface_file)
 
     async def run(self) -> None:
         self._create()
         self.is_running = True
         while self.is_running:
-            self._calculate_time()
             self._process_events()
-            self._update()
-            self._draw()
+            self._calculate_time()
+            if not self.is_paused:
+                self._update()
             await asyncio.sleep(0)
+            self._draw()
         self._clean()
 
     def _create(self):
+        create_text(self.ecs_world, self.interface_cfg, self.screen)
+
         self._player_entity = create_player_square(self.ecs_world, self.player_cfg, self.level_01_cfg["player_spawn"])
         self._player_c_v = self.ecs_world.component_for_entity(self._player_entity, CVelocity)
         self._player_c_t = self.ecs_world.component_for_entity(self._player_entity, CTransform)
@@ -109,12 +116,12 @@ class GameEngine:
 
         system_collision_enemy_bullet(self.ecs_world, self.explosion_cfg)
         system_collision_player_enemy(self.ecs_world, self._player_entity,
-                                      self.level_01_cfg, self.explosion_cfg)
+                                        self.level_01_cfg, self.explosion_cfg)
 
         system_explosion_kill(self.ecs_world)
 
         system_player_state(self.ecs_world)
-        system_enemy_hunter_state(self.ecs_world, self._player_entity, self.enemies_cfg["TypeHunter"])
+        system_enemy_hunter_state(self.ecs_world, self._player_entity, self.enemies_cfg["Hunter"])
 
         system_animation(self.ecs_world, self.delta_time)
 
@@ -131,27 +138,58 @@ class GameEngine:
         pygame.quit()
 
     def _do_action(self, c_input: CInputCommand):
+        # print(c_input.name, c_input.phase)
         if c_input.name == "PLAYER_LEFT":
             if c_input.phase == CommandPhase.START:
                 self._player_c_v.vel.x -= self.player_cfg["input_velocity"]
+                self.was_paused_left = False
             elif c_input.phase == CommandPhase.END:
-                self._player_c_v.vel.x += self.player_cfg["input_velocity"]
+                if self.was_paused_left:
+                    self.was_paused_left = False
+                else:
+                    self._player_c_v.vel.x += self.player_cfg["input_velocity"]
         if c_input.name == "PLAYER_RIGHT":
             if c_input.phase == CommandPhase.START:
                 self._player_c_v.vel.x += self.player_cfg["input_velocity"]
+                self.was_paused_rigth = False
             elif c_input.phase == CommandPhase.END:
-                self._player_c_v.vel.x -= self.player_cfg["input_velocity"]
+                if self.was_paused_rigth:
+                    self.was_paused_rigth = False
+                else:
+                    self._player_c_v.vel.x -= self.player_cfg["input_velocity"]
         if c_input.name == "PLAYER_UP":
             if c_input.phase == CommandPhase.START:
                 self._player_c_v.vel.y -= self.player_cfg["input_velocity"]
+                self.was_paused_up = False
             elif c_input.phase == CommandPhase.END:
-                self._player_c_v.vel.y += self.player_cfg["input_velocity"]
+                if self.was_paused_up:
+                    self.was_paused_up = False
+                else:
+                    self._player_c_v.vel.y += self.player_cfg["input_velocity"]
         if c_input.name == "PLAYER_DOWN":
             if c_input.phase == CommandPhase.START:
                 self._player_c_v.vel.y += self.player_cfg["input_velocity"]
+                self.was_paused_down = False
             elif c_input.phase == CommandPhase.END:
-                self._player_c_v.vel.y -= self.player_cfg["input_velocity"]
+                if self.was_paused_down:
+                    self.was_paused_down = False
+                else:
+                    self._player_c_v.vel.y -= self.player_cfg["input_velocity"]
 
         if c_input.name == "PLAYER_FIRE" and self.num_bullets < self.level_01_cfg["player_spawn"]["max_bullets"]:
             create_bullet(self.ecs_world, c_input.mouse_pos, self._player_c_t.pos,
-                          self._player_c_s.area.size, self.bullet_cfg)
+                            self._player_c_s.area.size, self.bullet_cfg)
+
+        if c_input.name == "PAUSE":
+            self.is_paused = not self.is_paused
+            if not self.is_paused:
+                self.was_paused_down = True
+                self.was_paused_up = True
+                self.was_paused_rigth = True
+                self.was_paused_left = True
+            system_pause(self.ecs_world, self.interface_cfg, self.screen, self._player_entity)
+
+        # if c_input.name == "PLAYER_SPREAD":
+        #     # we need to check if the player has cooldown
+        #     if self._player_c_c.timer <= self._player_c_c.cooldown:
+        #         return

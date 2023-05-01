@@ -8,6 +8,7 @@ from src.ecs.components.c_surface import CSurface
 from src.ecs.components.c_transform import CTransform
 from src.ecs.components.c_velocity import CVelocity
 from src.ecs.components.tags.c_tag_enemy import CTagEnemy
+from src.ecs.components.tags.c_tag_pause import CTagPause
 from src.ecs.components.tags.c_tag_player import CTagPlayer
 from src.ecs.components.tags.c_tag_bullet import CTagBullet
 from src.ecs.components.tags.c_tag_explosion import CTagExplosion
@@ -61,7 +62,6 @@ def create_enemy_hunter(world: esper.World, pos: pygame.Vector2, enemy_info: dic
     world.add_component(enemy_entity,
                         CAnimation(enemy_info["animations"]))
     world.add_component(enemy_entity, CTagEnemy("Hunter"))
-    ServiceLocator.sounds_service.play(enemy_info["sound_spawn"])
 
 
 def create_player_square(world: esper.World, player_info: dict, player_lvl_info: dict) -> int:
@@ -90,19 +90,26 @@ def create_input_player(world: esper.World):
     input_right = world.create_entity()
     input_up = world.create_entity()
     input_down = world.create_entity()
+    input_bullet_time = world.create_entity()
 
     world.add_component(input_left,
-                        CInputCommand("PLAYER_LEFT", pygame.K_LEFT))
+                        CInputCommand("PLAYER_LEFT", pygame.K_LEFT, False))
     world.add_component(input_right,
-                        CInputCommand("PLAYER_RIGHT", pygame.K_RIGHT))
+                        CInputCommand("PLAYER_RIGHT", pygame.K_RIGHT, False))
     world.add_component(input_up,
-                        CInputCommand("PLAYER_UP", pygame.K_UP))
+                        CInputCommand("PLAYER_UP", pygame.K_UP, False))
     world.add_component(input_down,
-                        CInputCommand("PLAYER_DOWN", pygame.K_DOWN))
+                        CInputCommand("PLAYER_DOWN", pygame.K_DOWN, False))
+    world.add_component(input_bullet_time,
+                        CInputCommand("PLAYER_SPREAD", pygame.BUTTON_RIGHT, False))
 
     input_fire = world.create_entity()
     world.add_component(input_fire,
-                        CInputCommand("PLAYER_FIRE", pygame.BUTTON_LEFT))
+                        CInputCommand("PLAYER_FIRE", pygame.BUTTON_LEFT, False))
+
+    input_pause = world.create_entity()
+    world.add_component(input_pause,
+                        CInputCommand("PAUSE", pygame.K_p, True))
 
 
 def create_bullet(world: esper.World,
@@ -132,3 +139,30 @@ def create_explosion(world: esper.World, pos: pygame.Vector2, explosion_info: di
                         CAnimation(explosion_info["animations"]))
     ServiceLocator.sounds_service.play(explosion_info["sound"])
     return explosion_entity
+
+def create_text(world: esper.World, interface_info: dict, screen: pygame.Surface):
+    font = pygame.font.Font(interface_info["font"], interface_info["font_size"])
+    title_text = interface_info["title"]
+    title_color_info = interface_info["title_color"]
+    title_color = pygame.Color(title_color_info[0], title_color_info[1], title_color_info[2])
+    title_pos = pygame.Vector2(interface_info["title_pos"][0], interface_info["title_pos"][1])
+    title_entity = world.create_entity()
+    world.add_component(title_entity, CSurface.from_text(title_text, font, title_color))
+    world.add_component(title_entity, CTransform(title_pos))
+
+    controls_text = interface_info["controls"]
+    controls_color_info = interface_info["controls_color"]
+    controls_color = pygame.Color(controls_color_info[0], controls_color_info[1], controls_color_info[2])
+    controls_pos = pygame.Vector2(interface_info["controls_pos"][0], interface_info["controls_pos"][1])
+    controls_entity = world.create_entity()
+    world.add_component(controls_entity, CSurface.from_text(controls_text, font, controls_color))
+    world.add_component(controls_entity, CTransform(controls_pos))
+
+    font = pygame.font.Font(interface_info["font"], interface_info["pause_font_size"])
+    pause_text = interface_info["pause"]
+    pause_pos = pygame.Vector2(screen.get_width() / 2 - font.size(pause_text)[0] / 2, screen.get_height() / 2 - font.size(pause_text)[1] / 2)
+    pause_entity = world.create_entity()
+    world.add_component(pause_entity, CTransform(pause_pos))
+    world.add_component(pause_entity, CTagPause())
+
+
